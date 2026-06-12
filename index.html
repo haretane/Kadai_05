@@ -1,0 +1,655 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>昨日の気温はどうだっけ？</title>
+    <!-- jQueryの読み込み -->
+    <script src="https://code.jquery.com/jquery-3.7.1.min.js"></script>
+    
+    <style>
+        /* ==========================================
+           CSS
+           ========================================== */
+        body {
+            font-family: sans-serif;
+            margin: 0;
+            padding: 15px;
+            background-color: #f5f5f5;
+            color: #333;
+        }
+
+        header, main {
+            max-width: 700px;
+            margin: 0 auto;
+        }
+
+        h1 {
+            font-size: 1.5rem;
+            text-align: center;
+            margin-bottom: 20px;
+        }
+
+        .search-box {
+            display: flex;
+            gap: 5px;
+            margin-bottom: 10px;
+        }
+        .search-box input {
+            flex: 1;
+            padding: 8px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+        }
+        .search-box button {
+            padding: 8px 15px;
+            background: #333;
+            color: white;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+        }
+
+        .favorites {
+            display: flex;
+            gap: 5px;
+            margin-bottom: 25px;
+        }
+        .fav-btn {
+            flex: 1;
+            padding: 6px;
+            background: #fff;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            font-size: 0.85rem;
+            cursor: pointer;
+        }
+
+        .comparison-section {
+            background: #fff;
+            padding: 15px;
+            border-radius: 8px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.05);
+            margin-bottom: 25px;
+            text-align: center;
+        }
+        .comparison-section h2 {
+            margin: 0;
+            font-size: 1.2rem;
+        }
+
+        .weather-forecast h3 {
+            font-size: 1rem;
+            margin-bottom: 10px;
+        }
+
+        /* 横スクロールコンテナ */
+        .forecast-container {
+            overflow-x: auto; /* 横方向にはみ出したらスクロール */
+            padding-bottom: 15px;
+            -webkit-overflow-scrolling: touch; /* スマホで滑らかにスクロール */
+        }
+
+        /* 上半分のカードを横に並べるベース */
+        .cards-row {
+            display: flex;
+            gap: 10px;
+            align-items: flex-start;
+            margin-bottom: 10px;
+        }
+
+        /* カードの見た目 */
+        .weather-card {
+            flex-shrink: 0; 
+            width: 120px;
+            background: #fff;
+            border: 1px solid #ddd;
+            padding: 12px;
+            border-radius: 6px;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.02);
+            text-align: center;
+            box-sizing: border-box;
+        }
+        .weather-card h4 {
+            margin: 0 0 8px 0;
+            font-size: 0.95rem;
+        }
+
+        /* 1行目を空行にする */
+        .day-label {
+            display: block;
+            height: 1.2rem; /* 高さを固定（空間） */
+            font-size: 0.8rem;
+            color: #ff4d4d;
+            font-weight: bold;
+        }
+
+        .weather-icon {
+            font-size: 1.8rem;
+            margin: 8px 0;
+        }
+        .temp-max { color: #ff4d4d; font-weight: bold; }
+        .temp-min { color: #4d94ff; font-weight: bold; }
+
+        /* ==========================================
+           表ブロック
+           ========================================== */
+        .hourly-sync-box {
+            display: none; 
+            max-height: 220px; 
+            overflow-y: auto; 
+            width: 640px; 
+        }
+
+        .hourly-sync-table {
+            width: 100%;
+            border-collapse: separate;
+            border-spacing: 10px 0; 
+            table-layout: fixed;
+        }
+
+        .hourly-sync-table td {
+            width: 120px; 
+            font-size: 0.75rem;
+            background: #f9f9f9;
+            padding: 6px 8px;
+            border-bottom: 1px dashed #eee;
+            box-sizing: border-box;
+            text-align: left;
+            white-space: nowrap; 
+        }
+
+        .hourly-sync-table tr:last-child td {
+            border-bottom: none;
+        }
+
+        .toggle-container {
+            margin-top: 15px;
+            text-align: center;
+        }
+        #all-toggle-btn {
+            width: 100%;
+            max-width: 300px;
+            padding: 10px;
+            background: #fff;
+            border: 1px solid #333;
+            border-radius: 20px;
+            font-weight: bold;
+            cursor: pointer;
+            transition: background 0.2s;
+        }
+        #all-toggle-btn:hover {
+            background: #eee;
+        }
+        /* 左右のスクロール矢印 */
+        .forecast-wrapper {
+            position: relative; 
+        }
+        .scroll-arrow {
+            position: absolute;
+            top: 70px; 
+            font-size: 1.2rem;
+            background: rgba(255, 255, 255, 0.9);
+            color: #333;
+            border: 1px solid #ddd;
+            width: 30px;
+            height: 30px;
+            border-radius: 50%;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            cursor: pointer; 
+            transition: opacity 0.2s;
+            z-index: 10;
+            opacity: 0; 
+        }
+        
+        .arrow-left { left: -5px; }
+        .arrow-right { right: -5px; }
+    </style>
+</head>
+<body>
+
+    <header>
+        <h1>昨日の気温はどうだっけ？</h1>
+        <div class="search-box">
+            <input type="text" id="search-input" placeholder="地名を入力（例：原宿、梅田）">
+            <button id="search-btn">検索</button>
+        </div>
+        <h3 class="current-location" style="font-size: 1rem; text-align: center; margin: 15px 0 5px 0;">現在の選択地：ハラハラ宿</h3>
+        <div class="favorites">
+            <button class="fav-btn" data-slot="1">登録地①</button>
+            <button class="fav-btn" data-slot="2">登録地②</button>
+            <button class="fav-btn" data-slot="3">登録地③</button>
+        </div>
+    </header>
+
+<main>
+    <section class="comparison-section">
+        <h2 id="comparison-text">今日は昨日より<br> <span style="color: #ff4d4d;">【 99℃ 高い 】</span> です！</h2>
+    </section>
+
+    <section class="weather-forecast">        
+
+        <div class="forecast-wrapper">
+            <!-- 左右の矢印 -->
+            <div class="scroll-arrow arrow-left">◀</div>
+            <div class="scroll-arrow arrow-right">▶</div>
+
+            <!-- ★横スクロールする大元のコンテナ -->
+            <div class="forecast-container">
+                
+                <!-- ① 上半分：カードの横並びエリア -->
+                <div class="cards-row">
+                    <div class="weather-card">
+                        <h4>
+                            <span class="day-label"></span><!-- 高さキープ用のからデータ -->
+                            <span class="date-text">--日 (-)</span>
+                        </h4>
+                        <div class="weather-icon">-</div>
+                        <div class="temp-max">--℃</div>
+                        <div class="temp-min">--℃</div>
+                    </div>
+
+                    <div class="weather-card">
+                        <h4>
+                            <span class="day-label"></span>
+                            <span class="date-text">-日 (-)</span>
+                        </h4>
+                        <div class="weather-icon">-</div>
+                        <div class="temp-max">--℃</div>
+                        <div class="temp-min">--℃</div>
+                    </div>
+
+                    <div class="weather-card">
+                        <h4>
+                            <span class="day-label"></span>
+                            <span class="date-text">10日 (水)</span>
+                        </h4>
+                        <div class="weather-icon">☂️</div>
+                        <div class="temp-max">19℃</div>
+                        <div class="temp-min">15℃</div>
+                    </div>
+
+                    <div class="weather-card">
+                        <h4>
+                            <span class="day-label">今日</span><!-- 今日！！ -->
+                            <span class="date-text">--日 (-)</span>
+                        </h4>
+                        <div class="weather-icon">☀️</div>
+                        <div class="temp-max">--℃</div>
+                        <div class="temp-min">--℃</div>
+                    </div>
+
+                    <div class="weather-card">
+                        <h4>
+                            <span class="day-label"></span>
+                            <span class="date-text">12日 (金)</span>
+                        </h4>
+                        <div class="weather-icon">☁️</div>
+                        <div class="temp-max">22℃</div>
+                        <div class="temp-min">16℃</div>
+                    </div>
+                </div>
+
+                <!-- タイムテーブル -->
+                <div class="hourly-sync-box">
+                    <table class="hourly-sync-table">
+                        <tbody>
+                            <!--  tr td の位置 -->
+                        </tbody>
+                    </table>
+                </div>
+                
+            </div>
+        </div>
+
+
+        <div class="toggle-container">
+            <button id="all-toggle-btn">▼ 時間ごとの詳細をまとめて比べる</button>
+        </div>
+
+    </section>
+</main>
+
+<script>
+// ==========================================
+// ボタン＆制御ブロック
+// ==========================================
+
+// 一括トグルボタンの処理
+$(document).on('click', '#all-toggle-btn', function() {
+    $('.hourly-sync-box').slideToggle(200, function() {
+        $('.hourly-sync-box').scrollTop(95); 
+    });
+    
+    if ($(this).text().includes('▼')) {
+        $(this).text('▲ 詳細をたたむ');
+    } else {
+        $(this).text('▼ 時間ごとの詳細をまとめて比べる');
+    }
+});
+
+
+
+function updateArrows() {
+    const $container = $('.forecast-container');
+    const scrollLeft = $container.scrollLeft(); // 現在の左からのスクロール量
+    const maxScrollLeft = $container[0].scrollWidth - $container.outerWidth(); // スクロールの最大限界値
+
+    // 左側に10px以上スクロールしていれば、左矢印（◀）を表示
+    if (scrollLeft > 10) {
+        $('.arrow-left').css('opacity', 1);
+    } else {
+        $('.arrow-left').css('opacity', 0);
+    }
+
+    // 右側にまだ10px以上のスクロール余白があれば、右矢印（▶）を表示
+    if (scrollLeft < maxScrollLeft - 10) {
+        $('.arrow-right').css('opacity', 1);
+    } else {
+        $('.arrow-right').css('opacity', 0);
+    }
+}
+
+$('.forecast-container').on('scroll', function() {
+    updateArrows();
+});
+
+// 左矢印（◀）をクリックしたときの処理
+$(document).on('click', '.arrow-left', function() {
+    $('.forecast-container').animate({ scrollLeft: '-=130' }, 200);
+});
+
+// 右矢印（▶）をクリックしたときの処理
+$(document).on('click', '.arrow-right', function() {
+    $('.forecast-container').animate({ scrollLeft: '+=130' }, 200);
+});
+
+// ==========================================
+// API接続ブロック：住所・天気を取得
+// ==========================================
+
+
+// 検索ボタンが押された時の処理
+$(document).on('click', '#search-btn', function() {
+    // 入力された文字（地名）を取得して、前後の余計な空白を削る
+    const keyword = $('#search-input').val().trim();
+    
+
+    // もし何も入力されていなかったら、処理を中断
+    if (!keyword) {
+        alert('地名を入力してください（例：原宿、梅田）');
+        return;
+    }
+
+
+
+    // 地名から緯度・経度を調べるためのOpen-Meteoの検索URL
+    const geoUrl = `https://geocoding-api.open-meteo.com/v1/search?name=${encodeURIComponent(keyword)}&count=10&language=ja&format=json`;
+
+    // 検索APIにアクセス
+    $.ajax({
+        url: geoUrl,
+        type: 'GET',
+        dataType: 'json'
+    })
+   .done(function(geoData) {
+        if (!geoData.results || geoData.results.length === 0) {
+            alert('指定された地名が見つかりませんでした。別のキーワードを試してください。');
+            return;
+        }
+
+        // 10件の中から、日本（country_codeが "JP"）の場所を絞り込む
+        const jpResults = geoData.results.filter(function(r) {
+            return r.country_code === 'JP';
+        });
+        
+        let result;
+        if (jpResults.length > 0) {
+            // 候補が複数あれば、人口（population）が多い順に並び替えて、1番多いところを選択
+            jpResults.sort(function(a, b) {
+                return (b.population || 0) - (a.population || 0);
+            });
+            result = jpResults[0]; 
+        } else {
+            // もし日本国内になければ、海外の同名地名の一番上のやつを採用
+            result = geoData.results[0];
+        }
+
+        // 選ばれた場所の緯度・経度を取り出す
+        const lat = result.latitude;
+        const lng = result.longitude;        
+        const cityName = result.admin1 ? `${result.admin1} ${result.name}` : result.name;
+
+        getWeatherData(lat, lng, cityName);
+    })
+    .fail(function(error) {
+        console.error("地名検索に失敗しました", error);
+        alert("システムエラーで地名が検索できませんでした。");
+    });
+});
+
+
+ // 💡 【追加】入力欄でエンターキーが押された時も、検索ボタンを自動でクリックする
+$(document).on('keydown', '#search-input', function(e) {
+    if (e.which === 13) { // 13はEnterキー
+        e.preventDefault(); // 画面の余計なリロードを防ぐ
+        $('#search-btn').click(); // 検索ボタンをクリック！
+    }
+});
+
+// ==========================================
+// 💡 【追加】ローカルストレージ（登録地保存）ブロック
+// ==========================================
+
+// アプリ起動時や保存時に、ローカルストレージの中身をボタンの見た目に反映する関数
+function initFavorites() {
+    for (let slot = 1; slot <= 3; slot++) {
+        // ローカルストレージからデータを引っ張ってくる
+        const saved = localStorage.getItem(`fav_slot_${slot}`);
+        const $btn = $(`.fav-btn[data-slot="${slot}"]`);
+        
+        if (saved) {
+            const data = JSON.parse(saved);
+            // 地名が長すぎるとボタンからはみ出るので、後ろの都市名（例：「Tokyo Machida」なら「Machida」）だけを抽出
+            const shortName = data.name.split(' ').pop();
+            
+            // ボタンの文字を「① Machida」のように書き換える
+            $btn.text(`${slot === 1 ? '①' : slot === 2 ? '②' : '③'} ${shortName}`);
+            $btn.css('background', '#e6f3ff'); // 登録済みは薄い青色にして分かりやすく！
+        } else {
+            // 空っぽの時はデフォルト表示に戻す
+            $btn.text(`登録地${slot === 1 ? '①' : slot === 2 ? '②' : '③'}`);
+            $btn.css('background', '#fff');
+        }
+    }
+}
+
+// 現在画面に出ている天気の場所を、指定されたスロットに保存する関数
+function saveLocation(slot) {
+    const dataToSave = {
+        lat: currentLat,
+        lng: currentLng,
+        name: currentCityName
+    };
+    // ローカルストレージに文字として保存！
+    localStorage.setItem(`fav_slot_${slot}`, JSON.stringify(dataToSave));
+    alert(`登録地${slot}に「${currentCityName}」を保存しました！\n次回からワンタップで呼び出せます。`);
+    initFavorites(); // ボタンの見た目を即座に更新
+}
+
+// 長押し判定のためのタイマー変数
+let pressTimer;
+let isLongPress = false;
+
+// ボタンを押し込んだ瞬間（マウスダウン / タッチスタート）
+$(document).on('mousedown touchstart', '.fav-btn', function() {
+    isLongPress = false;
+    const slot = $(this).data('slot');
+    
+    // 0.8秒間押し続けたら「長押し」と判定して上書き保存を実行
+    pressTimer = setTimeout(function() {
+        isLongPress = true;
+        saveLocation(slot);
+    }, 800);
+});
+
+// ボタンから指やマウスが離れた、または画面をスクロールした瞬間（タイマーを即座にリセット）
+$(document).on('mouseup mouseleave touchend touchmove', '.fav-btn', function() {
+    clearTimeout(pressTimer);
+});
+
+// クリックが完了した時の処理
+$(document).on('click', '.fav-btn', function() {
+    if (isLongPress) return; // ※※ 長押し保存が発動した後は、このクリック処理を完全にスルーする
+
+    const slot = $(this).data('slot');
+    const saved = localStorage.getItem(`fav_slot_${slot}`);
+
+    if (saved) {
+        // すでに中にデータがあれば、その緯度・経度・地名でお天気関数を呼び出す！
+        const data = JSON.parse(saved);
+        getWeatherData(data.lat, data.lng, data.name);
+    } else {
+        // もし枠が空っぽなら、現在の場所をその場ですぐに登録！
+        saveLocation(slot);
+    }
+});
+
+// アプリが一番最初に起動した瞬間に、ボタンの初期化を1回だけ実行する
+initFavorites();
+
+    
+
+
+
+
+// 現在画面に表示している場所の情報をキープしておく変数
+let currentLat = 35.67;
+let currentLng = 139.70;
+let currentCityName = "原宿";
+
+
+function getWeatherData(lat, lng, cityName) {
+    // お天気を呼び出すたびに、最新の緯度・経度・地名をグローバル変数に上書き保存する
+    currentLat = lat;
+    currentLng = lng;
+    currentCityName = cityName;
+
+    $('.current-location').text(`現在の選択地：${cityName}`);
+
+
+
+    // URLの latitude=${lat} と longitude=${lng} に連動するように書き換え
+    const apiUrl = `https://api.open-meteo.com/v1/forecast?latitude=${lat}&longitude=${lng}&daily=temperature_2m_max,temperature_2m_min,weather_code&hourly=temperature_2m,weather_code&timezone=Asia%2FTokyo&past_days=3&forecast_days=3`;
+
+    $.ajax({
+        url: apiUrl,
+        type: 'GET',
+        cache: false,
+        dataType: 'json'
+    })
+    .done(function(data) {
+        console.log("テスト：", data);
+
+        // ==========================================
+        // 処理1：一番上の「昨日との比較メッセージ」を書き換える
+        // ==========================================
+        const maxTempYesterday = data.daily.temperature_2m_max[2];
+        const maxTempToday = data.daily.temperature_2m_max[3];
+        const tempDiff = maxTempToday - maxTempYesterday;
+        const roundedDiff = Math.abs(tempDiff).toFixed(1);
+        let comparisonText = "";
+        
+        if (tempDiff > 0) {
+            comparisonText = `今日は昨日より<br> <span style="color: #ff4d4d;">【 ${roundedDiff}℃ 高い 】</span> です！`;
+        } else if (tempDiff < 0) {
+            comparisonText = `今日は昨日より<br> <span style="color: #4d94ff;">【 ${roundedDiff}℃ 低い 】</span> です！`;
+        } else {
+            comparisonText = `今日は昨日と<br> <span style="color: #666;">【 同じ気温 】</span> です！`;
+        }
+        $('#comparison-text').html(comparisonText);
+
+        // ==========================================
+        // 処理2：for文でカードの上半分（日付・メイン天気）を書き換える
+        // ==========================================
+        for (let i = 0; i < 5; i++) {
+            const maxTemp = data.daily.temperature_2m_max[i];
+            const minTemp = data.daily.temperature_2m_min[i];
+
+            const rawDate = data.daily.time[i]; 
+            const dateObj = new Date(rawDate);  
+            const dateNum = dateObj.getDate();  
+            const weekDays = ["日", "月", "火", "水", "木", "金", "土"];
+            const dayOfWeek = weekDays[dateObj.getDay()]; 
+            const dateText = `${dateNum}日 (${dayOfWeek})`;
+
+            const weatherCode = data.daily.weather_code[i];
+            let weatherIcon = "☁️"; 
+            if (weatherCode === 0) weatherIcon = "☀️";
+            else if (weatherCode >= 1 && weatherCode <= 3) weatherIcon = "🌤️";
+            else if ((weatherCode >= 61 && weatherCode <= 65) || (weatherCode >= 80 && weatherCode <= 82)) weatherIcon = "☔";
+
+            const $card = $('.weather-card').eq(i); 
+            $card.find('.date-text').text(dateText);
+            $card.find('.weather-icon').text(weatherIcon); 
+            $card.find('.temp-max').text(`${maxTemp.toFixed(1)}℃`); 
+            $card.find('.temp-min').text(`${minTemp.toFixed(1)}℃`); 
+        }
+
+        // ==========================================
+        // 処理3：24時間（縦）× 5日分（横）の統合テーブルを生成
+        // ==========================================
+        let tableHtml = ""; 
+        
+        // 外側のループ：4時〜翌am3時までの「24行」を縦に作る
+        for (let step = 0; step < 24; step++) {
+            const h = (4 + step) % 24;
+            const timeStr = `${String(h).padStart(2, '0')}:00`;   
+            
+            tableHtml += `<tr>`; // 新しい行（時間）の始まり
+            
+            // 内側のループ：その時間に対して「5日分（5列）」のマスを横に並べる
+            for (let i = 0; i < 5; i++) {
+                const hourlyIndex = (i * 24) + 4 + step;
+                const temp = data.hourly.temperature_2m[hourlyIndex]; 
+                const hCode = data.hourly.weather_code[hourlyIndex];  
+                
+                let hIcon = "☁️"; 
+                if (hCode === 0) hIcon = "☀️";
+                else if (hCode >= 1 && hCode <= 3) hIcon = "🌤️";
+                else if ((hCode >= 61 && hCode <= 65) || (hCode >= 80 && hCode <= 82)) hIcon = "☔";
+
+                // 5列分のtdを順番に横へ合体
+                tableHtml += `<td>${timeStr} - ${hIcon} ${temp.toFixed(1)}℃</td>`;
+            }
+            
+            tableHtml += `</tr>`; // 行のおしまい
+        }
+
+        // 生成した24行×5列の巨大なHTMLを、統合テーブルのtbodyに流し込む
+        $('.hourly-sync-table tbody').html(tableHtml);
+
+        // ==========================================
+        // アプリ起動時、自動で「今日（4枚目）」が画面真ん中に来るようにスクロール
+        // ==========================================
+        setTimeout(function() {
+            // スクロールアニメーション（400ms）が終わった瞬間（function() { updateArrows(); }）に矢印を計算
+            $('.forecast-container').animate({ scrollLeft: 300 }, 400, function() {
+                updateArrows();
+            });
+        }, 300);
+    })
+    .withFail = function(error) {
+        console.error("APIの取得に失敗", error);
+    };
+}
+
+// デフォルト
+getWeatherData(35.67,139.70,"原宿");
+
+</script>
+</body>
+</html>
