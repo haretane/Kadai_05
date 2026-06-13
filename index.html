@@ -207,6 +207,16 @@
         
         .arrow-left { left: -5px; }
         .arrow-right { right: -5px; }
+
+        /* 画面幅が広いときだけ中央寄せにする */
+        @media (min-width: 680px) {
+            .cards-row {
+                justify-content: center;
+            }
+        }
+
+
+
     </style>
 </head>
 <body>
